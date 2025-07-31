@@ -1,156 +1,46 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Low-Risk Stock Picker</title>
-<style>
-  body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }
-  input, button { padding: 10px; font-size: 16px; margin: 5px 0; }
-  table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-  th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-  th { background-color: #f4f4f4; }
-  .buy { background-color: #d4edda; }
-  .hold { background-color: #f8d7da; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Stock Picker</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="container">
+    <h1>Live Stock Picker</h1>
+    <form id="stockForm">
+      <label for="ticker">Enter Stock Ticker:</label>
+      <input type="text" id="ticker" name="ticker" required>
+      <button type="submit">Get Stock Data</button>
+    </form>
+    <div id="stockResult"></div>
+  </div>
 
-<h1>Low-Risk Stock Picker</h1>
-<p>Enter comma-separated stock tickers (e.g. AAPL, MSFT, JNJ):</p>
-<input type="text" id="tickersInput" placeholder="AAPL, MSFT, JNJ" style="width: 100%" />
-<button onclick="runPicker()">Run Picker</button>
+  <script>
+    const form = document.getElementById('stockForm');
+    const result = document.getElementById('stockResult');
 
-<table id="resultsTable" style="display:none;">
-  <thead>
-    <tr>
-      <th>Ticker</th>
-      <th>Price</th>
-      <th>Avg Volume</th>
-      <th>RSI (14)</th>
-      <th>ATR %</th>
-      <th>Signal</th>
-    </tr>
-  </thead>
-  <tbody id="resultsBody"></tbody>
-</table>
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const ticker = document.getElementById('ticker').value.toUpperCase();
+      const proxy = 'https://cors-anywhere.herokuapp.com/';
+      const url = `${proxy}https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=3mo&interval=1d`;
 
-<script>
-// Helper: Calculate RSI (14)
-function calculateRSI(closes) {
-  let gains = 0, losses = 0;
-  for (let i = 1; i < closes.length; i++) {
-    let diff = closes[i] - closes[i - 1];
-    if(diff > 0) gains += diff;
-    else losses -= diff;
-  }
-  if(losses === 0) return 100;
-  let rs = gains / losses;
-  return 100 - (100 / (1 + rs));
-}
+      result.innerHTML = 'Loading...';
 
-// Helper: Calculate ATR %
-function calculateATR(highs, lows, closes) {
-  let trs = [];
-  for(let i = 1; i < highs.length; i++){
-    let tr = Math.max(
-      highs[i] - lows[i],
-      Math.abs(highs[i] - closes[i - 1]),
-      Math.abs(lows[i] - closes[i - 1])
-    );
-    trs.push(tr);
-  }
-  let atr = trs.reduce((a,b) => a + b, 0) / trs.length;
-  return atr;
-}
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to fetch stock data');
+        const data = await response.json();
+        const lastClose = data.chart.result[0].indicators.quote[0].close.pop();
 
-// Fetch historical data from Yahoo Finance
-async function fetchYahooData(ticker) {
-  // Last ~90 days, daily interval
-  let url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=3mo&interval=1d`;
-  let resp = await fetch(url);
-  if(!resp.ok) throw new Error(`Failed to fetch data for ${ticker}`);
-  let data = await resp.json();
-
-  try {
-    let result = data.chart.result[0];
-    let timestamps = result.timestamp;
-    let quotes = result.indicators.quote[0];
-    let closes = quotes.close;
-    let highs = quotes.high;
-    let lows = quotes.low;
-    let volumes = quotes.volume;
-
-    // Filter out null closes (non-trading days)
-    let filtered = closes.map((c, i) => {
-      return (c === null) ? null : {
-        close: c,
-        high: highs[i],
-        low: lows[i],
-        volume: volumes[i]
-      };
-    }).filter(x => x !== null);
-
-    return filtered;
-  } catch(e) {
-    throw new Error(`Data parse error for ${ticker}`);
-  }
-}
-
-async function runPicker(){
-  let input = document.getElementById('tickersInput').value;
-  if(!input) {
-    alert("Please enter ticker symbols");
-    return;
-  }
-  let tickers = input.split(',').map(t => t.trim().toUpperCase());
-  let tbody = document.getElementById('resultsBody');
-  tbody.innerHTML = '';
-  document.getElementById('resultsTable').style.display = 'none';
-
-  for(let ticker of tickers) {
-    try {
-      let data = await fetchYahooData(ticker);
-      if(data.length < 20) {
-        tbody.innerHTML += `<tr><td colspan="6">${ticker}: Not enough data</td></tr>`;
-        continue;
+        result.innerHTML = `<h2>${ticker}</h2><p>Latest Close: $${lastClose.toFixed(2)}</p>`;
+      } catch (error) {
+        result.innerHTML = `<p>Error fetching data. Try a different ticker or check connection.</p>`;
       }
-      let closes = data.map(d => d.close);
-      let highs = data.map(d => d.high);
-      let lows = data.map(d => d.low);
-      let volumes = data.map(d => d.volume);
-
-      // Calculate indicators
-      let rsi = calculateRSI(closes.slice(-15));  // last 14 closes for RSI
-      let atr = calculateATR(highs.slice(-15), lows.slice(-15), closes.slice(-15));
-      let latestClose = closes[closes.length - 1];
-      let atrPercent = (atr / latestClose) * 100;
-      let avgVolume = volumes.reduce((a,b) => a + b, 0) / volumes.length;
-
-      // Apply filters
-      let signal = 'Hold';
-      if(rsi < 30 && atrPercent < 2 && avgVolume > 1_000_000) {
-        signal = 'Buy (mean reversion)';
-      }
-
-      let rowClass = signal.startsWith('Buy') ? 'buy' : 'hold';
-
-      tbody.innerHTML += `<tr class="${rowClass}">
-        <td>${ticker}</td>
-        <td>${latestClose.toFixed(2)}</td>
-        <td>${Math.round(avgVolume).toLocaleString()}</td>
-        <td>${rsi.toFixed(2)}</td>
-        <td>${atrPercent.toFixed(2)}%</td>
-        <td>${signal}</td>
-      </tr>`;
-
-    } catch (e) {
-      tbody.innerHTML += `<tr><td colspan="6">${ticker}: Error fetching data</td></tr>`;
-    }
-  }
-  document.getElementById('resultsTable').style.display = 'table';
-}
-</script>
-
+    });
+  </script>
 </body>
 </html>
+
