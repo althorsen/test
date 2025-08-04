@@ -1,46 +1,206 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Stock Picker</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stock Picker with Fundamental Analysis</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 900px;
+    margin: 30px auto;
+    padding: 10px;
+    background: #f9f9f9;
+  }
+  h1 {
+    text-align: center;
+    color: #333;
+  }
+  #stockResult {
+    margin-top: 20px;
+    background: #fff;
+    padding: 15px;
+    border-radius: 6px;
+    box-shadow: 0 0 6px rgba(0,0,0,0.1);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+  }
+  th, td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: center;
+  }
+  th {
+    background-color: #eee;
+  }
+  .best-buy {
+    background-color: #d4edda !important;
+    font-weight: bold;
+  }
+  .error {
+    color: #b00020;
+    font-weight: bold;
+  }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h1>Live Stock Picker</h1>
-    <form id="stockForm">
-      <label for="ticker">Enter Stock Ticker:</label>
-      <input type="text" id="ticker" name="ticker" required>
-      <button type="submit">Get Stock Data</button>
-    </form>
-    <div id="stockResult"></div>
-  </div>
 
-  <script>
-    const form = document.getElementById('stockForm');
-    const result = document.getElementById('stockResult');
+<h1>Stock Picker with Fundamental Analysis</h1>
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const ticker = document.getElementById('ticker').value.toUpperCase();
-      const proxy = 'https://cors-anywhere.herokuapp.com/';
-      const url = `${proxy}https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=3mo&interval=1d`;
+<div id="stockResult">Loading stock data...</div>
 
-      result.innerHTML = 'Loading...';
+<script>
+const tickers = ['LLY', 'GE', 'HD', 'PANW', 'AVGO', 'QMCO', 'BMRA', 'VKTX', 'PSL', 'SMMT', 'LBTYK'];
+const resultDiv = document.getElementById('stockResult');
+const proxy = 'https://cors-anywhere.herokuapp.com/'; // CORS proxy
 
-      try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Failed to fetch stock data');
-        const data = await response.json();
-        const lastClose = data.chart.result[0].indicators.quote[0].close.pop();
+// Simulated fundamentals data (replace with real API in future)
+const fundamentals = {
+  LLY: { revenueGrowth: 0.08, epsGrowth: 0.10 },
+  GE: { revenueGrowth: 0.05, epsGrowth: 0.07 },
+  HD: { revenueGrowth: 0.12, epsGrowth: 0.11 },
+  PANW: { revenueGrowth: 0.20, epsGrowth: 0.22 },
+  AVGO: { revenueGrowth: 0.15, epsGrowth: 0.18 },
+  QMCO: { revenueGrowth: 0.03, epsGrowth: 0.05 },
+  BMRA: { revenueGrowth: 0.06, epsGrowth: 0.04 },
+  VKTX: { revenueGrowth: 0.25, epsGrowth: 0.30 },
+  PSL: { revenueGrowth: 0.07, epsGrowth: 0.06 },
+  SMMT: { revenueGrowth: 0.04, epsGrowth: 0.05 },
+  LBTYK: { revenueGrowth: 0.10, epsGrowth: 0.09 },
+};
 
-        result.innerHTML = `<h2>${ticker}</h2><p>Latest Close: $${lastClose.toFixed(2)}</p>`;
-      } catch (error) {
-        result.innerHTML = `<p>Error fetching data. Try a different ticker or check connection.</p>`;
-      }
-    });
-  </script>
+// Calculate RSI(14) from close prices array
+function calculateRSI(closes) {
+  if (closes.length < 15) return null; // need at least 15 closes
+  let gains = 0, losses = 0;
+  for (let i = closes.length - 14; i < closes.length; i++) {
+    const change = closes[i] - closes[i - 1];
+    if (change > 0) gains += change;
+    else losses -= change;
+  }
+  if (losses === 0) return 100;
+  const rs = gains / losses;
+  return 100 - (100 / (1 + rs));
+}
+
+// Calculate price growth % over period (first to last close)
+function calculatePriceGrowth(closes) {
+  if (closes.length < 2) return 0;
+  const first = closes[0];
+  const last = closes[closes.length - 1];
+  return (last - first) / first;
+}
+
+async function fetchStockData(ticker) {
+  try {
+    const url = `${proxy}https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=3mo&interval=1d`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Network error');
+    const data = await response.json();
+
+    const chartResult = data.chart.result && data.chart.result[0];
+    if (!chartResult) throw new Error('No data');
+
+    const closes = chartResult.indicators.quote[0].close.filter(c => c !== null);
+    const latestClose = closes[closes.length - 1];
+    const rsi = calculateRSI(closes);
+    const priceGrowth = calculatePriceGrowth(closes);
+
+    // Get fundamentals (mocked)
+    const f = fundamentals[ticker] || { revenueGrowth: 0, epsGrowth: 0 };
+
+    return { ticker, latestClose, rsi, priceGrowth, revenueGrowth: f.revenueGrowth, epsGrowth: f.epsGrowth };
+  } catch (err) {
+    return { ticker, error: true };
+  }
+}
+
+// Scoring function combining metrics:
+// Lower RSI = lower risk (scale: inverse, so lower RSI better)
+// Higher growth metrics = better
+// Weight example: RSI 40%, price growth 20%, revenue growth 20%, EPS growth 20%
+function scoreStock(stock) {
+  if (stock.error) return -Infinity;
+  if (stock.rsi === null) return -Infinity;
+
+  // Normalize RSI to 0-1 (lower is better, so invert)
+  let rsiScore = 1 - Math.min(stock.rsi, 100) / 100;
+
+  // Price growth capped between -1 and +1 for normalization
+  let pg = Math.min(Math.max(stock.priceGrowth, -1), 1);
+  // Revenue and EPS growth assumed between 0 and 1
+  let rg = Math.min(Math.max(stock.revenueGrowth, 0), 1);
+  let eg = Math.min(Math.max(stock.epsGrowth, 0), 1);
+
+  // Combine weighted sum
+  return (rsiScore * 0.4) + (pg * 0.2) + (rg * 0.2) + (eg * 0.2);
+}
+
+async function updateStocks() {
+  resultDiv.innerHTML = 'Fetching stock data...';
+
+  const promises = tickers.map(ticker => fetchStockData(ticker));
+  const stocks = await Promise.all(promises);
+
+  // Compute scores
+  stocks.forEach(s => s.score = scoreStock(s));
+
+  // Find best buy (highest score)
+  let bestBuy = null;
+  stocks.forEach(stock => {
+    if (!bestBuy || stock.score > bestBuy.score) bestBuy = stock;
+  });
+
+  // Build table rows
+  let rows = '';
+  for (const stock of stocks) {
+    if (stock.error) {
+      rows += `<tr><td>${stock.ticker}</td><td colspan="6" class="error">Error fetching data</td></tr>`;
+    } else if (stock.rsi === null) {
+      rows += `<tr><td>${stock.ticker}</td><td colspan="6" class="error">Insufficient data</td></tr>`;
+    } else {
+      const highlight = (bestBuy && stock.ticker === bestBuy.ticker) ? 'best-buy' : '';
+      rows += `<tr class="${highlight}">
+        <td>${stock.ticker}</td>
+        <td>$${stock.latestClose.toFixed(2)}</td>
+        <td>${stock.rsi.toFixed(2)}</td>
+        <td>${(stock.priceGrowth * 100).toFixed(2)}%</td>
+        <td>${(stock.revenueGrowth * 100).toFixed(2)}%</td>
+        <td>${(stock.epsGrowth * 100).toFixed(2)}%</td>
+        <td>${stock.score.toFixed(3)}</td>
+      </tr>`;
+    }
+  }
+
+  resultDiv.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Latest Close</th>
+          <th>RSI (14)</th>
+          <th>3-Mo Price Growth</th>
+          <th>Revenue Growth</th>
+          <th>EPS Growth</th>
+          <th>Score</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="margin-top: 15px; font-style: italic;">* Highlighted row is the best buy candidate based on combined score.</p>
+  `;
+}
+
+// Initial fetch
+updateStocks();
+
+// Refresh every 10 minutes
+setInterval(updateStocks, 10 * 60 * 1000);
+
+</script>
+
 </body>
 </html>
-
