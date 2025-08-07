@@ -202,5 +202,27 @@ setInterval(updateStocks, 10 * 60 * 1000);
 
 </script>
 
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Stock Picker</title>
+</head>
+<body>
+  <h1>Live Stock Picker</h1>
+
+  <div id="output"></div>
+
+  <script>
+    async function getStockData(symbol) {
+      const res = await fetch(`/api/getStocks?symbol=${symbol}`);
+      const data = await res.json();
+      console.log(data);
+      document.getElementById("output").innerText = JSON.stringify(data, null, 2);
+    }
+
+    getStockData("LLY");
+  </script>
 </body>
 </html>
